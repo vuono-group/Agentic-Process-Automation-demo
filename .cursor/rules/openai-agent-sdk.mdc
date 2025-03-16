@@ -1,0 +1,9 @@
+---
+description: Limit python object to OpenAI AgentSKD object 
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+All user python object should be limitied into https://platform.openai.com/docs/guides/agents - library objects. All expections should be explained in reade and sparred with human developer. 
