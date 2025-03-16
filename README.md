@@ -108,24 +108,21 @@ An agent that uses GPT-4o vision capabilities to identify sales orders from emai
 
 ```python
 from agents import Agent
-from tools import identify_orders_from_emails, identify_orders_from_all_emails
+from tools import identify_orders_from_all_emails
 
 # Create an order identification agent with tools
 order_agent = Agent(
     name="Order Identification Agent",
     instructions="""You are a helpful assistant that can identify sales orders from emails.
 
-    When asked to identify orders from a specific email:
-    - Use the identify_orders_from_emails tool to analyze the email and its attachments
-    - Summarize what you found, including customer, items, and quantities
-    - If you can't identify an order, explain why
-
     When asked to identify orders from all emails:
     - Use the identify_orders_from_all_emails tool to analyze all email folders
     - Summarize all orders found, including counts and key details
     - If you can't identify any orders, explain why
     """,
-    tools=[identify_orders_from_emails, identify_orders_from_all_emails],
+    # Using the batch processing tool for analyzing all email folders at once
+    # This is the tool used in the orchestration workflow
+    tools=[identify_orders_from_all_emails],
 )
 ```
 
@@ -248,17 +245,14 @@ python agent_tester.py bc "Post all identified orders to Business Central"
 
 #### Orchestration Runner (orchestration_runner.py)
 
-A dedicated script for running the orchestration agent:
+A script for running the orchestration agent with the complete workflow:
 
 ```bash
-# Run the orchestration workflow
-python orchestration_runner.py [input_text]
-
-# Examples:
+# Run the complete workflow using the orchestration agent
 python orchestration_runner.py "Run the complete workflow"
-python orchestration_runner.py "Fetch 10 emails and identify orders"
-python orchestration_runner.py "Check for new orders and post to Business Central"
 ```
+
+This command triggers the orchestration agent to execute the entire sales order processing workflow, from fetching emails to posting orders in Business Central.
 
 **Technical Details:**
 - Focused solely on running the orchestration workflow

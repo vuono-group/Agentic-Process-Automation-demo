@@ -315,17 +315,37 @@ def _get_product_pictures():
     product_pictures = []
     
     if product_pictures_dir.exists():
-        for pic_file in product_pictures_dir.glob('*.png'):
-            # Extract item number and description from filename
-            # Format: "1996-S (ATLANTA-kovalevy, perus).png"
-            name = pic_file.stem
-            item_number = name.split(' ')[0]
-            description = name[name.find('(')+1:name.find(')')]
-            product_pictures.append({
-                "file_path": str(pic_file),
-                "item_number": item_number,
-                "description": description
-            })
+        # Look for both PNG and JPG files
+        for pic_file in product_pictures_dir.glob('*.*'):
+            if pic_file.suffix.lower() in ['.png', '.jpg', '.jpeg']:
+                try:
+                    # Extract item number and description from filename
+                    # Handle different filename formats
+                    name = pic_file.stem
+                    
+                    # Format: "1996-S (ATLANTA-kovalevy, perus).png"
+                    if '(' in name and ')' in name:
+                        item_number = name.split(' ')[0]
+                        description = name[name.find('(')+1:name.find(')')]
+                    # Format: "1925-W (Jabra speaker - sensitive microphone.jpg" (missing closing parenthesis)
+                    elif '(' in name:
+                        item_number = name.split(' ')[0]
+                        description = name[name.find('(')+1:]
+                    # Other formats
+                    else:
+                        parts = name.split(' ', 1)
+                        item_number = parts[0]
+                        description = parts[1] if len(parts) > 1 else item_number
+                    
+                    product_pictures.append({
+                        "file_path": str(pic_file),
+                        "item_number": item_number,
+                        "description": description,
+                        "file_extension": pic_file.suffix.lower()[1:]  # Store extension without the dot
+                    })
+                    logging.info(f"Found product image: {item_number} - {description} ({pic_file.name})")
+                except Exception as e:
+                    logging.error(f"Error parsing product image filename {pic_file.name}: {str(e)}")
     
     return product_pictures
 
@@ -341,26 +361,35 @@ def _process_single_email(email_folder_path):
         # Get the email folder path
         email_folder = Path(email_folder_path)
         if not email_folder.exists():
+            logging.error(f"Email folder does not exist: {email_folder}")
             return {"order_details": None, "confidence_score": 0}
         
         # Read email content
         content_file = email_folder / 'content.txt'
         if not content_file.exists():
+            logging.error(f"Content file does not exist: {content_file}")
             return {"order_details": None, "confidence_score": 0}
             
         # Read the raw email content
         with open(content_file, 'r', encoding='utf-8') as f:
             email_data = json.load(f)
             raw_content = email_data.get('content', '')
+            logging.info(f"Email content loaded: {len(raw_content)} characters")
         
         # Check for attachments in the folder
         attachments_dir = email_folder / 'attachments'
         attachments = []
         if attachments_dir.exists():
             attachments = [f for f in attachments_dir.iterdir() if f.is_file()]
+            logging.info(f"Found {len(attachments)} attachments: {[att.name for att in attachments]}")
         
         # Get product pictures
         product_pictures = _get_product_pictures()
+        logging.info(f"Found {len(product_pictures)} product pictures")
+        
+        # Calculate default delivery date (current date + 14 days)
+        current_date = datetime.now()
+        default_delivery_date = (current_date + timedelta(days=14)).strftime("%Y-%m-%d")
         
         # Format the email content
         formatted_email = f"""
@@ -378,10 +407,19 @@ Product Catalog Images Available:
 -------------------------------
 {chr(10).join(f"- {pic['item_number']} - {pic['description']}" for pic in product_pictures)}
 
-Please extract all order details including customer information, dates, and items ordered.
-If the order details are in an attached image, please analyze the image carefully.
-If an item is not mentioned in the text but there's an image attachment, compare it with the product catalog images
-and match it to the most similar product. Use the item number and description from the matching product's filename.
+IMPORTANT INSTRUCTIONS:
+1. Extract all order details including customer information, dates, and items ordered.
+2. If the order details are in an attached image, please analyze the image carefully.
+3. COMPARE ANY ATTACHED IMAGES WITH ALL PRODUCT CATALOG IMAGES to identify what product is being ordered.
+4. The customer may have sent a photo of the exact product they want to order.
+5. Look for visual similarities in shape, color, and features between the attachment and catalog images.
+6. If you identify a match, use the item number and description from the matching product's filename.
+7. If the email mentions a quantity (e.g., "3 pieces"), use that quantity.
+8. If no quantity is specified, default to 1.
+9. DELIVERY DATE MUST BE IN THE FUTURE - if no date is specified or the date is in the past, use current date + 14 days.
+10. Today's date is {current_date.strftime("%Y-%m-%d")} and the default delivery date should be {default_delivery_date}.
+11. Always explain your reasoning for the delivery date in the data_repair_notes.
+
 Return null if no valid order information can be found.
 """
         
@@ -391,6 +429,7 @@ Return null if no valid order information can be found.
         ]
         
         # Add email attachments if present
+        attachment_count = 0
         for attachment in attachments:
             if attachment.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
                 base64_image = _encode_image(str(attachment))
@@ -398,26 +437,39 @@ Return null if no valid order information can be found.
                     message_content.append({
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
+                            "url": f"data:image/{attachment.suffix.lower()[1:]};base64,{base64_image}"
                         }
                     })
+                    attachment_count += 1
+                    logging.info(f"Added attachment image: {attachment.name}")
+                else:
+                    logging.error(f"Failed to encode attachment: {attachment.name}")
         
         # Add product catalog images
+        product_count = 0
         for product in product_pictures:
             base64_image = _encode_image(product["file_path"])
             if base64_image:
+                # Use the correct MIME type based on the file extension
+                file_ext = product.get("file_extension", "png")
                 message_content.append({
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_image}"
+                        "url": f"data:image/{file_ext};base64,{base64_image}"
                     }
                 })
+                product_count += 1
+                logging.info(f"Added product image: {product['item_number']} - {product['description']}")
+            else:
+                logging.error(f"Failed to encode product image: {product['item_number']}")
+        
+        logging.info(f"Sending request to OpenAI with {len(message_content)} content items ({attachment_count} attachments, {product_count} product images)")
         
         # Get order information using GPT-4o with structured output
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": """You are an expert at identifying sales orders from emails and images.
+                {"role": "system", "content": f"""You are an expert at identifying sales orders from emails and images.
 You must validate and repair order information using the existing master data records.
 
 Valid Customers (Customer Name - Customer Number):
@@ -435,7 +487,7 @@ Valid Items (Item Number - Description):
 - 1920-S - ANTWERP-kokouspöytä
 - 1925-W - Kokouspaketti 1–6
 - 1928-S - AMSTERDAM-lamppu
-- 1929-W - Kokouspaketti 1–8
+- 1929-W - Jabra speaker - sensitive microphone
 - 1936-S - BERLIN-vierastuoli, keltainen
 - 1953-W - Vierasosio 1
 - 1960-S - ROME-vierastuoli, vihreä
@@ -449,10 +501,22 @@ Valid Items (Item Number - Description):
 - 1996-S - ATLANTA-kovalevy, perus
 - 2000-S - SYDNEY-toimistotuoli, vihreä
 
+IMAGE MATCHING INSTRUCTIONS:
+- You will receive email attachments and product catalog images
+- CAREFULLY COMPARE any email attachment images with ALL product catalog images
+- Look for visual similarities in shape, color, and features
+- If an email attachment shows a product, identify which catalog product it matches
+- Pay special attention to distinctive features like:
+  * For furniture: shape, color, material, legs, armrests
+  * For electronics: overall shape, buttons, connectors, displays
+- Even if the email text doesn't mention a specific product, the attachment may show the product being ordered
+- The customer may have attached a photo of the exact product they want to order
+
 Data Repair Instructions:
 1. Customer Names:
    - If a customer name is slightly misspelled or has different capitalization, match it to the closest valid customer
    - Example: "Adatum Corp" or "ADATUM CORPORATION" should be corrected to "Adatum Corporation"
+   - If the email signature mentions a company name, use that as the customer
 
 2. Item Numbers and Descriptions:
    - If an item number is found without a description, add the correct description from the master data
@@ -463,42 +527,54 @@ Data Repair Instructions:
    - When matching images, use the item number and description from the matching product's filename
 
 3. Dates:
+   - Today's date is {current_date.strftime("%Y-%m-%d")}
+   - The default delivery date (today + 14 days) is {default_delivery_date}
    - Ensure all dates are in YYYY-MM-DD format
+   - IMPORTANT: The requested delivery date must ALWAYS be in the future
+   - If a delivery date is mentioned but it's in the past, use {default_delivery_date} instead
    - If only a partial date is provided, use reasonable defaults (e.g., first day of mentioned month)
-   - If no delivery date is specified, set it to 14 days from today
+   - If no delivery date is specified at all, set it to {default_delivery_date}
+   - ALWAYS include your reasoning for the delivery date in the data_repair_notes
+   - Example note: "Delivery date set to {default_delivery_date} because no date was specified in the email"
+   - Example note: "Delivery date in email (2023-01-01) was in the past, corrected to {default_delivery_date}"
+
+4. Quantities:
+   - If a quantity is mentioned in the email (e.g., "3 pieces", "5 units"), use that quantity
+   - If no quantity is specified, default to 1
+   - The unit of measurement should be "KPL" (Finnish for piece) unless otherwise specified
 
 Extract all order information and return it in a structured JSON format. Always try to repair and match data before rejecting it.
 
 Structure:
-{
-    "order_details": {
-        "customer_info": {
+{{
+    "order_details": {{
+        "customer_info": {{
             "name": "string",  // Must match one of the valid customer names exactly after repair
             "contact_person": "string",  // Name of the contact person
             "customer_number": "string",  // The corresponding customer number (e.g., "10000")
             "original_customer_name": "string"  // The original customer name before repair (if different)
-        },
-        "dates": {
-            "requested_delivery_date": "YYYY-MM-DD"  // When the customer wants the items delivered
-        },
+        }},
+        "dates": {{
+            "requested_delivery_date": "YYYY-MM-DD"  // When the customer wants the items delivered (MUST be in the future)
+        }},
         "items": [
-            {
+            {{
                 "item_number": "string",  // Must match one of the valid item numbers exactly after repair
                 "description": "string",  // The corresponding item description from master data
                 "quantity": number,  // Number of units ordered
                 "unit": "string",  // Unit of measurement (e.g., KPL, PCS)
                 "original_item_info": "string",  // The original item info before repair (if different)
                 "matched_from_image": boolean  // True if item was matched from an image
-            }
+            }}
         ],
         "data_repair_notes": [
-            "string"  // List of any corrections made to the original data
+            "string"  // List of any corrections made to the original data, MUST include reasoning for delivery date
         ]
-    },
+    }},
     "confidence_score": number  // Confidence level in the order identification and repair (0-1)
-}
+}}
 
-If no valid order information can be found, or if the data cannot be repaired to match the master data, return {"order_details": null, "confidence_score": 0}"""},
+If no valid order information can be found, or if the data cannot be repaired to match the master data, return {{"order_details": null, "confidence_score": 0}}"""},
                 {"role": "user", "content": message_content}
             ],
             response_format={"type": "json_object"}
@@ -506,6 +582,7 @@ If no valid order information can be found, or if the data cannot be repaired to
         
         # Extract the structured result
         result = json.loads(response.choices[0].message.content)
+        logging.info(f"Received response from OpenAI: {json.dumps(result, indent=2)}")
         
         # Save the results
         output_file = email_folder / 'identified_order.json'
@@ -516,12 +593,15 @@ If no valid order information can be found, or if the data cannot be repaired to
         
     except Exception as e:
         logging.error(f"Error identifying orders: {str(e)}")
+        import traceback
+        logging.error(traceback.format_exc())
         return {"order_details": None, "confidence_score": 0, "error": str(e)}
 
 @function_tool
 def identify_orders_from_emails(email_folder_path: str, credentials_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Identify sales orders from emails and their attachments using GPT-4o.
+    Identify sales orders from a SINGLE email folder and its attachments using GPT-4o.
+    This tool is for targeted processing of one specific email folder.
     
     Args:
         email_folder_path: Path to the email folder containing content.txt and attachments
@@ -529,6 +609,10 @@ def identify_orders_from_emails(email_folder_path: str, credentials_path: Option
         
     Returns:
         Dictionary containing identified order details or null if no order is found
+        
+    Note:
+        Use this tool when you need to process just one specific email folder.
+        For batch processing of all emails, use identify_orders_from_all_emails instead.
     """
     # Simply call the helper function
     return _process_single_email(email_folder_path)
@@ -536,13 +620,19 @@ def identify_orders_from_emails(email_folder_path: str, credentials_path: Option
 @function_tool
 def identify_orders_from_all_emails(emails_dir_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Process all email folders in the emails directory and identify orders.
+    Process ALL email folders in the emails directory and identify orders.
+    This tool is for batch processing of multiple email folders at once.
     
     Args:
         emails_dir_path: Optional path to the directory containing email folders
         
     Returns:
         List of dictionaries containing identified order details
+        
+    Note:
+        This is the preferred tool for the orchestration workflow as it processes
+        all emails in a single operation. Use this when you need to batch process
+        multiple email folders rather than targeting a specific email.
     """
     try:
         # Use default emails directory if not specified

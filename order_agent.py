@@ -5,18 +5,12 @@ An agent that can identify sales orders from emails and their attachments using 
 """
 
 from agents import Agent
-from tools import identify_orders_from_emails, identify_orders_from_all_emails
+from tools import identify_orders_from_all_emails
 
-# Create an order identification agent with both single email and batch processing tools
+# Create an order identification agent with batch processing tool
 order_agent = Agent(
     name="Order Identification Assistant",
     instructions="""You are a helpful assistant that can identify sales orders from emails and their attachments.
-
-    When asked to identify orders from a specific email folder:
-    - Use the identify_orders_from_emails tool to analyze the email and its attachments
-    - You need to specify the path to the email folder (email_folder_path)
-    - Summarize the identified order details, including customer information, dates, and items ordered
-    - If no valid order is found, inform the user that no order could be identified
 
     When asked to process all emails in a directory:
     - Use the identify_orders_from_all_emails tool to analyze all email folders
@@ -38,6 +32,7 @@ order_agent = Agent(
     Remember: In an orchestration workflow, your ONLY job is to identify orders and report the results.
     The orchestration agent will decide what to do next.
     """,
-    tools=[identify_orders_from_emails, identify_orders_from_all_emails],
+    # Using only the batch processing tool since it's what's used in the orchestration workflow
+    tools=[identify_orders_from_all_emails],
     handoffs=[],  # Empty handoffs list as this agent doesn't delegate to other agents
 ) 
