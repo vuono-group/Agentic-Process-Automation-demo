@@ -123,6 +123,7 @@ order_agent = Agent(
     # Using the batch processing tool for analyzing all email folders at once
     # This is the tool used in the orchestration workflow
     tools=[identify_orders_from_all_emails],
+    handoffs=[],  # Empty handoffs list
 )
 ```
 
@@ -217,50 +218,6 @@ orchestration_agent = Agent(
 - Summarizes results from each step
 - Can run the complete workflow or individual steps as needed
 - Implements asynchronous execution for better performance
-
-### 5. Flexible Agent Runner (agent_tester.py and orchestration_runner.py)
-
-Scripts that provide functions to run agents in the project using the OpenAI Agent SDK.
-
-#### Agent Tester (agent_tester.py)
-
-A script for testing individual agents in the project:
-
-```bash
-# Test an individual agent using the command line
-python agent_tester.py <agent_name> [input_text]
-
-# Examples:
-python agent_tester.py email "Fetch 5 emails from my inbox using credentials_path='credentials.json'"
-python agent_tester.py order "Identify orders from all emails in the emails directory"
-python agent_tester.py bc "Post all identified orders to Business Central"
-```
-
-**Technical Details:**
-- Provides a unified interface for testing all individual agents
-- Automatically selects the appropriate run method (sync or async)
-- Includes default inputs for each agent type
-- Handles command-line arguments for flexible usage
-- Primarily for development and testing purposes
-
-#### Orchestration Runner (orchestration_runner.py)
-
-A script for running the orchestration agent with the complete workflow:
-
-```bash
-# Run the complete workflow using the orchestration agent
-python orchestration_runner.py "Run the complete workflow"
-```
-
-This command triggers the orchestration agent to execute the entire sales order processing workflow, from fetching emails to posting orders in Business Central.
-
-**Technical Details:**
-- Focused solely on running the orchestration workflow
-- Provides detailed output formatting and error handling
-- Uses the handoffs mechanism to coordinate specialized agents
-- Maintains context across the entire workflow
-- Designed for production use of the complete workflow
-- Implements OpenAI Agent SDK tracing for enhanced monitoring and debugging
 
 ### Asynchronous Runner Implementation
 
@@ -419,27 +376,14 @@ def send_gmail_email(to: str, subject: str, body: str, credentials_path: str) ->
 
 ### Order Identification Tools
 
-The order identification tools use GPT-4o vision capabilities to analyze emails and their attachments to identify sales orders:
+The order identification tool uses GPT-4o vision capabilities to analyze emails and their attachments to identify sales orders:
 
 ```python
 @function_tool
-def identify_orders_from_emails(email_folder_path: str, credentials_path: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Identify orders from a specific email folder.
-    
-    Args:
-        email_folder_path: Path to the email folder containing content.txt and attachments
-        credentials_path: Optional path to the credentials file for Gmail API
-        
-    Returns:
-        Dictionary containing identified order information
-    """
-    # Implementation details...
-
-@function_tool
 def identify_orders_from_all_emails(emails_dir_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Identify orders from all email folders in a directory.
+    Process ALL email folders in the emails directory and identify orders.
+    This tool is for batch processing of multiple email folders at once.
     
     Args:
         emails_dir_path: Optional path to the directory containing email folders
@@ -707,7 +651,7 @@ email_agent = Agent(
 order_agent = Agent(
     name="Order Identification Agent",
     instructions="...",
-    tools=[identify_orders_from_emails, identify_orders_from_all_emails],
+    tools=[identify_orders_from_all_emails],
     handoffs=[],  # Empty handoffs list
 )
 
