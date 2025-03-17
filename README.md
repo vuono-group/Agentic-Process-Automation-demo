@@ -2,6 +2,12 @@
 
 This repository demonstrates the OpenAI Agent SDK capabilities through specialized agent implementations for email processing, order identification, and Business Central integration. The OpenAI Agent SDK is a lightweight framework for building AI agents with minimal abstractions, following a Python-first design philosophy.
 
+## Demo Video
+
+Check out our demo video to see the solution in action:
+
+[Demo Video](user_example_video.mp4)
+
 ## Solution Overview
 
 ![Solution Overview](solution_overview.png)
@@ -13,6 +19,38 @@ This solution implements an Agentic Process Automation (APA) system for sales or
 3. **Business Central Agent**: Posts identified orders to Microsoft Dynamics Business Central
 
 The solution includes quality infrastructure with shadow runs, tracing & monitoring, A/B testing, quality visualization, and process mining for edge cases. The entire workflow is orchestrated and monitored by specialized agents.
+
+## Prerequisites
+
+Before you can run this application, you'll need:
+
+1. **OpenAI API Key**: An API key with access to GPT-4o
+2. **Gmail Account**: For email processing functionality
+3. **Microsoft Dynamics 365 Business Central Account**: For order processing integration
+
+### Setting Up Gmail Account
+
+To use the email functionality:
+1. Create a Gmail account if you don't have one at [gmail.com](https://gmail.com)
+2. Set up OAuth 2.0 credentials in Google Cloud Console:
+   - Create a new project
+   - Enable the Gmail API
+   - Configure the OAuth consent screen
+   - Create OAuth 2.0 Client ID credentials
+   - Download the credentials as `credentials.json`
+
+See the "Authentication for Gmail API" section below for more detailed instructions.
+
+### Setting Up Business Central Demo Account
+
+To use the Business Central integration:
+1. Sign up for a [Microsoft Dynamics 365 Business Central trial](https://dynamics.microsoft.com/en-us/business-central/overview/)
+2. During setup, select the "Sales" scenario to ensure you have the necessary modules
+3. Create an app registration in Azure Active Directory for API access
+4. Configure API permissions for Business Central
+5. Note your tenant ID, client ID, and generate a client secret
+
+The trial provides a fully functional environment for 30 days, which is sufficient for testing this solution.
 
 ## Installation
 
